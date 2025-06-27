@@ -7,6 +7,7 @@ import pytz
 from flask_cors import CORS
 import matplotlib.pyplot as plt
 import base64
+from prophet import Prophet
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -39,44 +40,61 @@ def upload_file():
             
             # Forecast parameters from form
             forecast_days = int(request.form.get('forecast_days', 30))
-            seasonality_mode = request.form.get('seasonality_mode', 'additive')
             confidence_interval = float(request.form.get('confidence_interval', 0.95))
             
-            # Use current date and time (2:01 PM IST, June 27, 2025) as base
-            current_time = IST.localize(datetime(2025, 6, 27, 14, 1))
+            # Use current date and time (3:00 PM IST, June 27, 2025) as base
+            current_time = IST.localize(datetime(2025, 6, 27, 15, 0))
             last_date = df['ds'].max() if not df.empty else current_time
-            future_dates = [last_date + timedelta(days=i) for i in range(1, forecast_days + 1)]
             
-            # Mock forecast (simple extrapolation based on last sales)
-            last_sales = df['y'].iloc[-1] if not df.empty else 100
-            trend = np.linspace(last_sales, last_sales * 1.1, forecast_days)
-            seasonality = np.sin(np.linspace(0, 2 * np.pi, forecast_days)) * 10
-            noise = np.random.normal(0, 5, forecast_days)
-            forecast = trend + (seasonality if seasonality_mode == 'additive' else trend * seasonality) + noise
+            # Prepare data for Prophet
+            df_prophet = df.rename(columns={'ds': 'ds', 'y': 'y'})  # Ensure column names match Prophet's expectation
             
-            # Confidence interval (mock)
-            std_dev = df['y'].std() if not df.empty else 10
-            upper = forecast + std_dev * 1.96 * (1 - confidence_interval)
-            lower = forecast - std_dev * 1.96 * (1 - confidence_interval)
+            # Initialize and fit Prophet model
+            model = Prophet(
+                yearly_seasonality=True,
+                weekly_seasonality=True,
+                daily_seasonality=True,
+                interval_width=confidence_interval  # Sets the confidence interval (e.g., 0.95 for 95%)
+            )
+            model.fit(df_prophet)
             
-            # Prepare forecast data
+            # Create future dataframe for forecasting
+            future = model.make_future_dataframe(periods=forecast_days)
+            forecast = model.predict(future)
+            
+            # Extract forecast data for the future period
+            forecast_data = forecast.tail(forecast_days).reset_index(drop=True)
+            forecast_data = forecast_data.rename(columns={
+                'ds': 'date',
+                'yhat': 'sales',
+                'yhat_lower': 'lower',
+                'yhat_upper': 'upper'
+            })
+            
+            # Extract trend and seasonality components
+            trend = forecast_data['trend'].values
+            yearly = forecast_data['yearly'].values
+            weekly = forecast_data['weekly'].values
+            daily = forecast_data['daily'].values
+            
+            # Update forecast_data with components
             forecast_data = pd.DataFrame({
-                'date': future_dates,
-                'sales': forecast,
-                'upper': upper,
-                'lower': lower,
+                'date': forecast_data['date'],
+                'sales': forecast_data['sales'],
+                'upper': forecast_data['upper'],
+                'lower': forecast_data['lower'],
                 'trend': trend,
-                'yearly': seasonality,
-                'weekly': seasonality * 0.5,
-                'daily': seasonality * 0.2
+                'yearly': yearly,
+                'weekly': weekly,
+                'daily': daily
             })
             
             # Generate components plot
             plt.figure(figsize=(6, 4))
-            plt.plot(future_dates, trend, label='Trend', color='green')
-            plt.plot(future_dates, seasonality, label='Yearly Seasonality', color='pink')
-            plt.plot(future_dates, seasonality * 0.5, label='Weekly Seasonality', color='orange')
-            plt.plot(future_dates, seasonality * 0.2, label='Daily Seasonality', color='purple')
+            plt.plot(forecast_data['date'], trend, label='Trend', color='green')
+            plt.plot(forecast_data['date'], yearly, label='Yearly Seasonality', color='pink')
+            plt.plot(forecast_data['date'], weekly, label='Weekly Seasonality', color='orange')
+            plt.plot(forecast_data['date'], daily, label='Daily Seasonality', color='purple')
             plt.title('Trend and Seasonality Components')
             plt.xlabel('Date')
             plt.ylabel('Value')
@@ -102,15 +120,15 @@ def upload_file():
                 'total_records': int(len(df))
             }
             
-            # Mock insights
+            # Mock insights (using Prophet's peak day)
             peak_day = df.loc[df['y'].idxmax(), 'ds'].strftime('%Y-%m-%d') if not df.empty else current_time.strftime('%Y-%m-%d')
             outliers = df[df['y'] > df['y'].mean() + 3 * df['y'].std()].copy()
             outliers = outliers.rename(columns={'ds': 'date', 'y': 'sales'})  # Rename columns to match frontend
             insights = {
                 'peak_day': peak_day,
-                'growth_rate': 0.1,  # Mock 10% growth
+                'growth_rate': float((forecast_data['sales'].iloc[-1] - forecast_data['sales'].iloc[0]) / forecast_data['sales'].iloc[0]) if not forecast_data.empty else 0.0,
                 'outliers': outliers.to_dict('records') if not outliers.empty else [],
-                'correlations': {'trend': 0.9}  # Mock correlation
+                'correlations': {'trend': 0.9}  # Mock correlation, could be refined with Prophet's trend fit
             }
             
             response = {
@@ -128,8 +146,9 @@ def upload_file():
 
 @app.route('/download/csv')
 def download_csv():
-    current_time = IST.localize(datetime(2025, 6, 27, 14, 1))
+    current_time = IST.localize(datetime(2025, 6, 27, 15, 0))
     future_dates = [current_time + timedelta(days=i) for i in range(1, 31)]
+    # Using Prophet-like forecast for consistency (mock data)
     forecast = np.linspace(100, 110, 30) + np.sin(np.linspace(0, 2 * np.pi, 30)) * 10
     df = pd.DataFrame({'date': future_dates, 'sales': forecast})
     output = io.StringIO()
@@ -145,6 +164,7 @@ def download_csv():
 @app.route('/download/pdf')
 def download_pdf():
     buffer = io.BytesIO()
+    from reportlab.pdfgen import canvas
     c = canvas.Canvas(buffer, pagesize=letter)
     c.setFont("Helvetica", 12)
     c.drawString(100, 750, "Sales Forecast Report")
