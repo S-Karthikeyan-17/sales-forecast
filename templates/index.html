@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Forecasting Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .dark-mode {
+            background-color: #1a202c;
+            color: #e2e8f0;
+        }
+        .dark-mode .bg-white { background-color: #2d3748; }
+        .dark-mode .text-gray-800 { color: #e2e8f0; }
+        .dark-mode .bg-gray-100 { background-color: #1a202c; }
+        .dark-mode .tab-inactive { background-color: #4a5568; color: #e2e8f0; }
+        .gradient-bg { background: linear-gradient(135deg, #3b82f6, #10b981); }
+        .card {
+            background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+            transition: transform 0.3s, box-shadow 0.3s, background 0.3s;
+            min-height: 300px;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 25px rgba(0, 0, 0, 0.15);
+            background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+        }
+        .dark-mode .card {
+            background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
+        }
+        .dark-mode .card:hover {
+            background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+        }
+        .chart-container { position: relative; height: 400px; width: 100%; margin-bottom: 1rem; }
+        .tab-active { background-color: #3b82f6; color: white; }
+        .tab-inactive { background-color: #e5e7eb; color: #374151; }
+        .glow-btn {
+            position: relative;
+            overflow: hidden;
+        }
+        .glow-btn::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        .glow-btn:hover::after {
+            width: 300px;
+            height: 300px;
+        }
+        .collapsible {
+            cursor: pointer;
+            padding: 0.5rem;
+            background-color: #f7fafc;
+            border-radius: 0.375rem;
+            transition: background-color 0.3s;
+        }
+        .collapsible:hover { background-color: #edf2f7; }
+        .dark-mode .collapsible { background-color: #4a5568; }
+        .dark-mode .collapsible:hover { background-color: #667eea; }
+        .collapsible-content {
+            padding: 0.5rem;
+            display: block;
+        }
+        .collapsible.active .collapsible-content {
+            display: block;
+        }
+        .collapsible.hidden .collapsible-content {
+            display: none;
+        }
+        .progress-bar {
+            width: 0;
+            height: 5px;
+            background-color: #3b82f6;
+            transition: width 1s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4" onload="AOS.init()">
+    <div class="max-w-6xl w-full bg-white shadow-2xl rounded-xl p-8" data-aos="fade-up" data-aos-delay="100">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-extrabold text-gray-800">Sales Forecasting Dashboard</h1>
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="theme-toggle" class="sr-only">
+                <div class="w-14 h-7 bg-gray-200 rounded-full shadow-inner transition-all duration-300 ease-in-out" aria-label="Toggle theme"></div>
+                <div class="absolute w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 ease-in-out" id="theme-toggle-slider"></div>
+            </label>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <div data-aos="fade-right" data-aos-delay="200">
+                <label class="block text-gray-700 font-semibold mb-2">Upload Sales Data (CSV)</label>
+                <input type="file" id="file-input" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" aria-label="Upload CSV file">
+                <p class="text-sm text-gray-500 mt-2">CSV must contain 'ds' (date, YYYY-MM-DD) and 'y' (sales) columns.</p>
+            </div>
+            <div data-aos="fade-left" data-aos-delay="300">
+                <label class="block text-gray-700 font-semibold mb-2">Forecast Options</label>
+                <div class="space-y-2">
+                    <div class="flex items-center gap-2">
+                        <select id="forecast-days" class="flex-1 p-2 border rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Forecast period" title="Select forecast duration">
+                            <option value="7">7 Days</option>
+                            <option value="30" selected>30 Days</option>
+                            <option value="90">90 Days</option>
+                            <option value="180">180 Days</option>
+                        </select>
+                        <select id="seasonality-mode" class="flex-1 p-2 border rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Seasonality mode" title="Choose seasonality type">
+                            <option value="additive">Additive Seasonality</option>
+                            <option value="multiplicative">Multiplicative Seasonality</option>
+                        </select>
+                        <select id="confidence-interval" class="flex-1 p-2 border rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Confidence interval" title="Set confidence level">
+                            <option value="0.80">80% Confidence</option>
+                            <option value="0.95" selected>95% Confidence</option>
+                            <option value="0.99">99% Confidence</option>
+                        </select>
+                    </div>
+                    <div class="text-center mt-2">
+                        <button id="save-prefs" class="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 glow-btn" aria-label="Save preferences">Save Prefs</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button id="predict-btn" class="w-full py-3 px-4 gradient-bg text-white rounded-lg hover:opacity-90 transition transform hover:scale-105 glow-btn" aria-label="Generate forecast">Generate Forecast</button>
+        <div id="progress-bar" class="progress-bar mt-2"></div>
+
+        <div id="loading" class="hidden mt-6 text-center">
+            <div class="animate-spin inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+            <span class="ml-2 text-gray-700">Processing Forecast...</span>
+        </div>
+
+        <div id="error" class="hidden mt-6 p-4 bg-red-100 text-red-700 rounded-lg" role="alert"></div>
+        <div id="success" class="hidden mt-6 p-4 bg-green-100 text-green-700 rounded-lg" role="alert"></div>
+
+        <div class="mt-8">
+            <div class="flex border-b mb-4 space-x-2">
+                <button id="tab-data" class="px-4 py-2 tab-active rounded-t-lg hover:bg-blue-200 transition" aria-label="Data Preview tab">Data Preview</button>
+                <button id="tab-forecast" class="px-4 py-2 tab-inactive rounded-t-lg hover:bg-blue-200 transition" aria-label="Forecast tab">Forecast</button>
+                <button id="tab-insights" class="px-4 py-2 tab-inactive rounded-t-lg hover:bg-blue-200 transition" aria-label="Insights tab">Insights</button>
+            </div>
+
+            <!-- Data Preview -->
+            <div id="data-preview" class="tab-content" data-aos="slide-up" data-aos-delay="100">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-semibold text-gray-800">Data Preview</h2>
+                    <button id="refresh-data" class="px-3 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 glow-btn" aria-label="Refresh data">Refresh Data</button>
+                </div>
+                <div class="card p-4 bg-white rounded-lg shadow-md">
+                    <div class="overflow-x-auto">
+                        <table id="preview-table" class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-200">
+                                    <th class="p-2">Date</th>
+                                    <th class="p-2">Sales</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Forecast -->
+            <div id="forecast-results" class="tab-content hidden" data-aos="slide-up" data-aos-delay="200">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4">Forecast Results</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="card p-4 bg-white rounded-lg shadow-md">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-2">Forecasted Sales</h3>
+                        <div class="chart-container">
+                            <canvas id="forecast-chart" class="lazy-load"></canvas>
+                        </div>
+                    </div>
+                    <div class="card p-4 bg-white rounded-lg shadow-md">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-2">Trend</h3>
+                        <div class="chart-container">
+                            <canvas id="trend-chart" class="lazy-load"></canvas>
+                        </div>
+                    </div>
+                    <div class="card p-4 bg-white rounded-lg shadow-md">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-2">Seasonality Components</h3>
+                        <div class="chart-container">
+                            <canvas id="seasonality-chart" class="lazy-load"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6 flex gap-4 flex-wrap">
+                    <a id="download-csv" href="#" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition transform hover:scale-105 glow-btn" aria-label="Download forecast CSV">Download CSV</a>
+                    <button id="download-png" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition transform hover:scale-105 glow-btn" aria-label="Download forecast chart PNG">Download Charts</button>
+                    <a id="download-pdf" href="#" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition transform hover:scale-105 glow-btn" aria-label="Download forecast report PDF">Download PDF</a>
+                </div>
+            </div>
+
+            <!-- Insights -->
+            <div id="insights-results" class="tab-content hidden" data-aos="slide-up" data-aos-delay="300">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4">Insights</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="card p-4 bg-white rounded-lg shadow-md">
+                        <div class="collapsible">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-2">Summary Statistics</h3>
+                        </div>
+                        <div class="collapsible-content">
+                            <p>Average Sales: <span id="avg-sales" class="text-blue-600 font-medium hover:text-blue-800 cursor-pointer"></span></p>
+                            <p>Median Sales: <span id="median-sales" class="text-blue-600 font-medium hover:text-blue-800 cursor-pointer"></span></p>
+                            <p>Standard Deviation: <span id="std-sales" class="text-blue-600 font-medium hover:text-blue-800 cursor-pointer"></span></p>
+                            <p>Max Sales: <span id="max-sales" class="text-blue-600 font-medium hover:text-blue-800 cursor-pointer"></span></p>
+                            <p>Min Sales: <span id="min-sales" class="text-blue-600 font-medium hover:text-blue-800 cursor-pointer"></span></p>
+                            <p>Total Records: <span id="total-records" class="text-blue-600 font-medium hover:text-blue-800 cursor-pointer"></span></p>
+                        </div>
+                    </div>
+                    <div class="card p-4 bg-white rounded-lg shadow-md">
+                        <div class="collapsible">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-2">Key Insights</h3>
+                        </div>
+                        <div class="collapsible-content">
+                            <p>Peak Sales Day: <span id="peak-day" class="text-green-600 font-medium hover:text-green-800 cursor-pointer"></span></p>
+                            <p>Growth Rate: <span id="growth-rate" class="text-green-600 font-medium hover:text-green-800 cursor-pointer"></span></p>
+                            <p>Outliers Detected: <span id="outliers-count" class="text-red-600 font-medium hover:text-red-800 cursor-pointer"></span></p>
+                            <p id="correlations" class="text-purple-600 font-medium hover:text-purple-800 cursor-pointer"></p>
+                        </div>
+                    </div>
+                    <div class="card p-4 bg-white rounded-lg shadow-md">
+                        <div class="collapsible">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-2">Outliers</h3>
+                        </div>
+                        <div class="collapsible-content">
+                            <div class="overflow-x-auto">
+                                <table id="outliers-table" class="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr class="bg-gray-200">
+                                            <th class="p-2">Date</th>
+                                            <th class="p-2">Sales</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                            <p id="no-outliers-message" class="text-gray-600 mt-2 hidden">No outliers detected.</p>
+                        </div>
+                    </div>
+                    <div class="card p-4 bg-white rounded-lg shadow-md">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-2">Seasonality & Trends</h3>
+                        <img id="components-plot" class="w-full rounded-lg shadow-md hover:shadow-lg transition cursor-pointer" alt="Seasonality and Trends" width="300" height="200" onclick="window.open(this.src)" onerror="handleImageError(this)">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global function to handle image error
+        function handleImageError(img) {
+            img.src = 'https://placehold.co/300x200?text=Image+Not+Loaded';
+            console.log('Failed to load image, using fallback:', img.src);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileInput = document.getElementById('file-input');
+            const forecastDays = document.getElementById('forecast-days');
+            const seasonalityMode = document.getElementById('seasonality-mode');
+            const confidenceInterval = document.getElementById('confidence-interval');
+            const predictBtn = document.getElementById('predict-btn');
+            const loading = document.getElementById('loading');
+            const progressBar = document.getElementById('progress-bar');
+            const errorDiv = document.getElementById('error');
+            const successDiv = document.getElementById('success');
+            const dataPreview = document.getElementById('data-preview');
+            const forecastResults = document.getElementById('forecast-results');
+            const insightsResults = document.getElementById('insights-results');
+            const tabData = document.getElementById('tab-data');
+            const tabForecast = document.getElementById('tab-forecast');
+            const tabInsights = document.getElementById('tab-insights');
+            const downloadCsv = document.getElementById('download-csv');
+            const downloadPng = document.getElementById('download-png');
+            const downloadPdf = document.getElementById('download-pdf');
+            const themeToggle = document.getElementById('theme-toggle');
+            const themeToggleSlider = document.getElementById('theme-toggle-slider');
+            const savePrefs = document.getElementById('save-prefs');
+            const refreshData = document.getElementById('refresh-data');
+            let forecastChart, trendChart, seasonalityChart;
+            let previewTable, outliersTable;
+
+            // Theme toggle with animation
+            themeToggle.addEventListener('change', () => {
+                document.body.classList.toggle('dark-mode');
+                themeToggleSlider.style.transform = document.body.classList.contains('dark-mode') ? 'translateX(100%)' : 'translateX(0)';
+            });
+
+            // Save preferences
+            savePrefs.addEventListener('click', () => {
+                localStorage.setItem('forecastDays', forecastDays.value);
+                localStorage.setItem('seasonalityMode', seasonalityMode.value);
+                localStorage.setItem('confidenceInterval', confidenceInterval.value);
+                showSuccess('Preferences saved!');
+            });
+
+            // Load saved preferences
+            window.addEventListener('load', () => {
+                forecastDays.value = localStorage.getItem('forecastDays') || '30';
+                seasonalityMode.value = localStorage.getItem('seasonalityMode') || 'additive';
+                confidenceInterval.value = localStorage.getItem('confidenceInterval') || '0.95';
+            });
+
+            // Tab switching
+            function switchTab(activeTab, activeContent) {
+                [tabData, tabForecast, tabInsights].forEach(tab => tab.classList.replace('tab-active', 'tab-inactive'));
+                [dataPreview, forecastResults, insightsResults].forEach(content => content.classList.add('hidden'));
+                activeTab.classList.replace('tab-inactive', 'tab-active');
+                activeContent.classList.remove('hidden');
+                console.log(`Switched to tab: ${activeTab.textContent}`);
+                if (activeTab === tabInsights) {
+                    document.querySelectorAll('.collapsible').forEach(coll => {
+                        coll.classList.add('active');
+                        console.log(`Collapsible ${coll.querySelector('h3').textContent} is active`);
+                    });
+                }
+            }
+
+            tabData.addEventListener('click', () => switchTab(tabData, dataPreview));
+            tabForecast.addEventListener('click', () => switchTab(tabForecast, forecastResults));
+            tabInsights.addEventListener('click', () => switchTab(tabInsights, insightsResults));
+
+            // Collapsible toggle logic
+            document.querySelectorAll('.collapsible').forEach(coll => {
+                coll.addEventListener('click', () => {
+                    coll.classList.toggle('active');
+                    coll.classList.toggle('hidden');
+                    console.log(`Toggled collapsible: ${coll.querySelector('h3').textContent}, Active: ${coll.classList.contains('active')}`);
+                });
+                coll.classList.add('active');
+            });
+
+            // Data preview
+            fileInput.addEventListener('change', () => {
+                if (fileInput.files.length) {
+                    const file = fileInput.files[0];
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const text = e.target.result;
+                        const rows = text.split('\n').slice(1);
+                        const data = rows.map(row => {
+                            const [ds, y] = row.split(',');
+                            return { ds, y: parseFloat(y) || 0 };
+                        }).filter(row => row.ds && !isNaN(row.y));
+                        if (previewTable) previewTable.destroy();
+                        previewTable = $('#preview-table').DataTable({
+                            data: data,
+                            columns: [
+                                { data: 'ds', title: 'Date' },
+                                { data: 'y', title: 'Sales' }
+                            ],
+                            pageLength: 5,
+                            lengthMenu: [5, 10, 25],
+                            searching: true,
+                            ordering: true,
+                            responsive: true,
+                            deferRender: true,
+                            dom: 'Bfrtip',
+                            buttons: ['copy', 'csv', 'excel', 'pdf', 'print']
+                        });
+                        dataPreview.classList.remove('hidden');
+                        switchTab(tabData, dataPreview);
+                    };
+                    reader.readAsText(file);
+                }
+            });
+
+            refreshData.addEventListener('click', () => {
+                if (fileInput.files.length) {
+                    fileInput.dispatchEvent(new Event('change'));
+                    showSuccess('Data refreshed!');
+                } else {
+                    showError('No file uploaded to refresh.');
+                }
+            });
+
+            // Predict button
+            predictBtn.addEventListener('click', async () => {
+                if (!fileInput.files.length) {
+                    showError('Please upload a CSV file.');
+                    return;
+                }
+
+                loading.classList.remove('hidden');
+                progressBar.style.width = '0%';
+                let width = 0;
+                const interval = setInterval(() => {
+                    if (width >= 100) clearInterval(interval);
+                    else width += 5;
+                    progressBar.style.width = `${width}%`;
+                }, 200);
+
+                errorDiv.classList.add('hidden');
+                successDiv.classList.add('hidden');
+                forecastResults.classList.add('hidden');
+                insightsResults.classList.add('hidden');
+
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+                formData.append('forecast_days', forecastDays.value);
+                formData.append('seasonality_mode', seasonalityMode.value);
+                formData.append('confidence_interval', confidenceInterval.value);
+
+                try {
+                    const response = await fetch('http://localhost:5000/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    console.log('Server response:', data);
+
+                    if (response.ok) {
+                        showSuccess('Forecast generated successfully!');
+                        displayResults(data);
+                        downloadCsv.href = 'http://localhost:5000/download/csv';
+                        downloadPdf.href = 'http://localhost:5000/download/pdf';
+                        switchTab(tabForecast, forecastResults); // Navigate to Forecast tab
+                    } else {
+                        showError(data.error || 'Server error occurred.');
+                    }
+                } catch (err) {
+                    showError('An error occurred. Please try again. Details: ' + err.message);
+                } finally {
+                    loading.classList.add('hidden');
+                    clearInterval(interval);
+                    progressBar.style.width = '100%';
+                    setTimeout(() => progressBar.style.width = '0%', 500);
+                }
+            });
+
+            // Download charts as PNG
+            downloadPng.addEventListener('click', () => {
+                html2canvas(document.querySelector('#forecast-results .grid')).then(canvas => {
+                    const link = document.createElement('a');
+                    link.href = canvas.toDataURL('image/png');
+                    link.download = 'forecast_charts.png';
+                    link.click();
+                });
+            });
+
+            function showError(message) {
+                errorDiv.textContent = message;
+                errorDiv.classList.remove('hidden');
+            }
+
+            function showSuccess(message) {
+                successDiv.textContent = message;
+                successDiv.classList.remove('hidden');
+            }
+
+            function displayResults(data) {
+                // Summary
+                document.getElementById('avg-sales').textContent = data.summary.avg_sales.toFixed(2) || 'N/A';
+                console.log('Avg Sales:', document.getElementById('avg-sales').textContent);
+                document.getElementById('median-sales').textContent = data.summary.median_sales.toFixed(2) || 'N/A';
+                console.log('Median Sales:', document.getElementById('median-sales').textContent);
+                document.getElementById('std-sales').textContent = data.summary.std_sales.toFixed(2) || 'N/A';
+                console.log('Std Sales:', document.getElementById('std-sales').textContent);
+                document.getElementById('max-sales').textContent = data.summary.max_sales.toFixed(2) || 'N/A';
+                console.log('Max Sales:', document.getElementById('max-sales').textContent);
+                document.getElementById('min-sales').textContent = data.summary.min_sales.toFixed(2) || 'N/A';
+                console.log('Min Sales:', document.getElementById('min-sales').textContent);
+                document.getElementById('total-records').textContent = data.summary.total_records || '0';
+                console.log('Total Records:', document.getElementById('total-records').textContent);
+
+                // Insights
+                document.getElementById('peak-day').textContent = data.insights.peak_day || 'N/A';
+                console.log('Peak Day:', document.getElementById('peak-day').textContent);
+                document.getElementById('growth-rate').textContent = (data.insights.growth_rate * 100).toFixed(2) + '%' || 'N/A';
+                console.log('Growth Rate:', document.getElementById('growth-rate').textContent);
+                document.getElementById('outliers-count').textContent = data.insights.outliers.length || '0';
+                console.log('Outliers Count:', document.getElementById('outliers-count').textContent);
+                const correlations = Object.entries(data.insights.correlations || {}).map(([key, value]) => `${key}: ${value.toFixed(2)}`).join(', ') || 'N/A';
+                document.getElementById('correlations').textContent = correlations ? `Correlations: ${correlations}` : 'No correlations';
+                console.log('Correlations:', document.getElementById('correlations').textContent);
+
+                // Outliers table
+                if (outliersTable) outliersTable.destroy();
+                const noOutliersMessage = document.getElementById('no-outliers-message');
+                if (data.insights.outliers && data.insights.outliers.length > 0) {
+                    noOutliersMessage.classList.add('hidden');
+                    outliersTable = $('#outliers-table').DataTable({
+                        data: data.insights.outliers,
+                        columns: [
+                            { data: 'date', title: 'Date' },
+                            { data: 'sales', title: 'Sales' }
+                        ],
+                        pageLength: 5,
+                        lengthMenu: [5, 10, 25],
+                        searching: true,
+                        ordering: true,
+                        responsive: true,
+                        deferRender: true,
+                        dom: 'Bfrtip',
+                        buttons: ['copy', 'csv', 'excel', 'pdf', 'print']
+                    });
+                } else {
+                    noOutliersMessage.classList.remove('hidden');
+                    outliersTable = $('#outliers-table').DataTable({
+                        data: [],
+                        columns: [
+                            { data: 'date', title: 'Date' },
+                            { data: 'sales', title: 'Sales' }
+                        ],
+                        pageLength: 5,
+                        searching: false,
+                        ordering: false,
+                        language: { emptyTable: "No outliers detected" }
+                    });
+                }
+
+                // Components plot
+                const componentsPlot = document.getElementById('components-plot');
+                componentsPlot.src = data.components_plot || 'https://placehold.co/300x200?text=Image+Not+Loaded';
+                componentsPlot.addEventListener('load', () => {
+                    console.log('Components plot loaded successfully:', componentsPlot.src);
+                });
+                console.log('Components Plot Src:', componentsPlot.src);
+
+                // Ensure insights-results is visible
+                insightsResults.style.display = 'block';
+                console.log('Insights tab visibility:', insightsResults.style.display);
+
+                // Verify card visibility
+                document.querySelectorAll('#insights-results .card').forEach((card, index) => {
+                    console.log(`Card ${index + 1} visibility:`, card.style.display || 'block');
+                });
+
+                // Destroy existing charts
+                if (forecastChart) forecastChart.destroy();
+                if (trendChart) trendChart.destroy();
+                if (seasonalityChart) seasonalityChart.destroy();
+
+                // Lazy load charts
+                const lazyLoad = (chartId, config) => {
+                    const ctx = document.getElementById(chartId).getContext('2d');
+                    return new Chart(ctx, config);
+                };
+
+                // Forecast chart
+                forecastChart = lazyLoad('forecast-chart', {
+                    type: 'line',
+                    data: {
+                        labels: data.forecast.map(item => item.date),
+                        datasets: [
+                            {
+                                label: 'Forecasted Sales',
+                                data: data.forecast.map(item => item.sales),
+                                borderColor: 'rgba(59, 130, 246, 1)',
+                                fill: false,
+                                tension: 0.4,
+                                pointRadius: 4,
+                                pointHoverRadius: 6
+                            },
+                            {
+                                label: 'Confidence Interval (Upper)',
+                                data: data.forecast.map(item => item.upper),
+                                borderColor: 'rgba(59, 130, 246, 0.2)',
+                                fill: '+1',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)'
+                            },
+                            {
+                                label: 'Confidence Interval (Lower)',
+                                data: data.forecast.map(item => item.lower),
+                                borderColor: 'rgba(59, 130, 246, 0.2)',
+                                fill: false,
+                                hidden: true
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            zoom: {
+                                zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' },
+                                pan: { enabled: true, mode: 'xy' }
+                            },
+                            tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}` } },
+                            legend: { onClick: (e, legendItem, legend) => {
+                                const index = legendItem.datasetIndex;
+                                const ci = legend.chart.data.datasets[index];
+                                if (ci.label.includes('Confidence')) ci.hidden = !ci.hidden;
+                                legend.chart.update();
+                            }},
+                            datalabels: { display: false }
+                        },
+                        onClick: (e, elements) => {
+                            if (elements.length > 0) {
+                                const index = elements[0].index;
+                                alert(`Date: ${data.forecast[index].date}, Sales: ${data.forecast[index].sales.toFixed(2)}`);
+                            }
+                        },
+                        scales: { x: { title: { display: true, text: 'Date' } }, y: { title: { display: true, text: 'Sales' } } }
+                    }
+                });
+
+                // Trend chart
+                trendChart = lazyLoad('trend-chart', {
+                    type: 'line',
+                    data: {
+                        labels: data.forecast.map(item => item.date),
+                        datasets: [{
+                            label: 'Trend',
+                            data: data.forecast.map(item => item.trend),
+                            borderColor: 'rgba(16, 185, 129, 1)',
+                            fill: false,
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            zoom: { zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' }, pan: { enabled: true, mode: 'xy' } },
+                            tooltip: { callbacks: { label: ctx => `Trend: ${ctx.parsed.y.toFixed(2)}` } }
+                        },
+                        onClick: (e, elements) => {
+                            if (elements.length > 0) {
+                                const index = elements[0].index;
+                                alert(`Date: ${data.forecast[index].date}, Trend: ${data.forecast[index].trend.toFixed(2)}`);
+                            }
+                        },
+                        scales: { x: { title: { display: true, text: 'Date' } }, y: { title: { display: true, text: 'Trend Value' } } }
+                    }
+                });
+
+                // Seasonality chart
+                seasonalityChart = lazyLoad('seasonality-chart', {
+                    type: 'line',
+                    data: {
+                        labels: data.forecast.map(item => item.date),
+                        datasets: [
+                            {
+                                label: 'Yearly Seasonality',
+                                data: data.forecast.map(item => item.yearly),
+                                borderColor: 'rgba(236, 72, 153, 1)',
+                                fill: false,
+                                tension: 0.4,
+                                pointRadius: 4,
+                                pointHoverRadius: 6
+                            },
+                            {
+                                label: 'Weekly Seasonality',
+                                data: data.forecast.map(item => item.weekly),
+                                borderColor: 'rgba(245, 158, 11, 1)',
+                                fill: false,
+                                tension: 0.4,
+                                pointRadius: 4,
+                                pointHoverRadius: 6
+                            },
+                            {
+                                label: 'Daily Seasonality',
+                                data: data.forecast.map(item => item.daily),
+                                borderColor: 'rgba(139, 92, 246, 1)',
+                                fill: false,
+                                tension: 0.4,
+                                pointRadius: 4,
+                                pointHoverRadius: 6
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            zoom: { zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' }, pan: { enabled: true, mode: 'xy' } },
+                            tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}` } },
+                            legend: { onClick: (e, legendItem, legend) => {
+                                const index = legendItem.datasetIndex;
+                                const ci = legend.chart.data.datasets[index];
+                                ci.hidden = !ci.hidden;
+                                legend.chart.update();
+                            }}
+                        },
+                        onClick: (e, elements) => {
+                            if (elements.length > 0) {
+                                const index = elements[0].index;
+                                alert(`Date: ${data.forecast[index].date}, ${elements[0].dataset.label}: ${elements[0].dataset.data[index].toFixed(2)}`);
+                            }
+                        },
+                        scales: { x: { title: { display: true, text: 'Date' } }, y: { title: { display: true, text: 'Seasonality Value' } } }
+                    }
+                });
+            }
+
+            // Lazy load charts
+            document.querySelectorAll('.lazy-load').forEach(canvas => {
+                const observer = new IntersectionObserver((entries, observer) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            const chartId = entry.target.id;
+                            if (!window[chartId]) {
+                                // Chart will be initialized in displayResults
+                            }
+                            observer.unobserve(entry.target);
+                        }
+                    });
+                }, { threshold: 0.1 });
+                observer.observe(canvas);
+            });
+        });
+    </script>
+</body>
+</html>
